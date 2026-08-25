@@ -1,7 +1,8 @@
 /bower_components/
 /node_modules/
 /.pulp-cache/
-/output/
+output/
+output.bak/
 /generated-docs/
 /.psc-package/
 /.psc*
