@@ -41,6 +41,7 @@ pub struct EventEmitter {
     listeners: Mutex<Vec<(EventKey, Listener)>>,
     max_listeners: AtomicI64,
     user_data: Mutex<Option<crate::UnknownType>>,
+    listen_hook: Mutex<Option<std::sync::Arc<dyn Fn(&str) + Send + Sync>>>,
 }
 
 impl EventEmitter {
@@ -49,6 +50,7 @@ impl EventEmitter {
             listeners: Mutex::new(Vec::new()),
             max_listeners: AtomicI64::new(10),
             user_data: Mutex::new(None),
+            listen_hook: Mutex::new(None),
         }
     }
 
@@ -71,15 +73,20 @@ impl EventEmitter {
                 vec![key.value(), callback.clone()],
             );
         }
-        let mut listeners = self.listeners.lock().unwrap();
-        if prepend {
-            let position = listeners
-                .iter()
-                .position(|(name, _)| !name.matches(&key))
-                .unwrap_or(listeners.len());
-            listeners.insert(position, (key, Listener { callback, once }));
-        } else {
-            listeners.push((key, Listener { callback, once }));
+        {
+            let mut listeners = self.listeners.lock().unwrap();
+            if prepend {
+                let position = listeners
+                    .iter()
+                    .position(|(name, _)| !name.matches(&key))
+                    .unwrap_or(listeners.len());
+                listeners.insert(position, (key.clone(), Listener { callback, once }));
+            } else {
+                listeners.push((key.clone(), Listener { callback, once }));
+            }
+        }
+        if let EventKey::Str(name) = &key {
+            self.run_listen_hook(name);
         }
     }
 
@@ -324,6 +331,24 @@ impl EventEmitter {
     pub fn user_data(&self) -> Option<crate::UnknownType> {
         self.user_data.lock().unwrap().clone()
     }
+
+    /// Installs a callback invoked after a listener is registered. Native
+    /// integrations use it to deliver state that happened before the listener
+    /// existed (child process lifecycle events, for example).
+    pub fn set_listen_hook(&self, hook: std::sync::Arc<dyn Fn(&str) + Send + Sync>) {
+        *self.listen_hook.lock().unwrap() = Some(hook);
+    }
+
+    pub fn run_listen_hook(&self, event: &str) {
+        let hook = self.listen_hook.lock().unwrap().clone();
+        if let Some(hook) = hook {
+            hook(event);
+        }
+    }
+
+    pub fn listener_count(&self, event: &str) -> usize {
+        self.matching(&EventKey::Str(event.to_owned())).len()
+    }
 }
 
 // Helpers used by the stream implementations, which emit events natively.
@@ -341,6 +366,17 @@ pub fn purust_emitter_emit(
     args: Vec<crate::UnknownType>,
 ) -> bool {
     emitter.emit(EventKey::Str(event.to_owned()), args)
+}
+
+pub fn purust_emitter_listener_count(emitter: &Rc<EventEmitter>, event: &str) -> usize {
+    emitter.listener_count(event)
+}
+
+pub fn purust_emitter_set_listen_hook(
+    emitter: &Rc<EventEmitter>,
+    hook: std::sync::Arc<dyn Fn(&str) + Send + Sync>,
+) {
+    emitter.set_listen_hook(hook);
 }
 
 pub fn purust_emitter_once_native(
