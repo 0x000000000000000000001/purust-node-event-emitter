@@ -18,9 +18,38 @@ package:
       - refs
 
 workspace:
+  backend:
+    cmd: ../purust/bin/purust
+    args: [--main, Test.Main, --source, output, --out, output/purust_output, --threaded]
   packageSet:
     registry: 77.7.0
   extraPackages:
+    arraybuffer-types:
+      path: "../purust-arraybuffer-types"
+    exists:
+      path: "../purust-exists"
+    free:
+      path: "../purust-free"
+    js-bigints:
+      path: "../purust-js-bigints"
+    js-date:
+      path: "../purust-js-date"
+    node-buffer:
+      path: "../purust-node-buffer"
+    node-child-process:
+      path: "../purust-node-child-process"
+    node-os:
+      path: "../purust-node-os"
+    ordered-collections:
+      path: "../purust-ordered-collections"
+    quickcheck:
+      path: "../purust-quickcheck"
+    spec-discovery:
+      path: "../purust-spec-discovery"
+    spec-node:
+      path: "../purust-spec-node"
+    strings-extra:
+      path: "../purust-strings-extra"
     aff:
       path: "../purust-aff"
     argonaut-core:

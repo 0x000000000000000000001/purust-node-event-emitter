@@ -268,14 +268,27 @@ pub fn Node_EventEmitter_setMaxListenersImpl() -> crate::UnknownType {
     })))
 }
 
-pub fn Node_EventEmitter_unsafeEmitFn(emitter: Rc<EventEmitter>) -> crate::UnknownType {
-    // Node's `emit` is variadic; the packages this port serves always emit
-    // through the native implementations, so the exposed function takes the
-    // event name only.
-    crate::Value::Func1(purust_core::Func1::Shared(Rc::new(move |name| {
-        let key = key_from_value(&name);
-        crate::mk_bool(emitter.emit(key, Vec::new()))
+pub fn Node_EventEmitter_unsafeEmitFn1() -> crate::UnknownType {
+    crate::Value::Func2(purust_core::Func2::Shared(Rc::new(|emitter, name| {
+        let emitter = emitter_unbox(&emitter);
+        crate::mk_bool(emitter.emit(key_from_value(&name), Vec::new()))
     })))
+}
+
+pub fn Node_EventEmitter_unsafeEmitFn2() -> crate::UnknownType {
+    crate::Value::Func3(purust_core::Func3::Shared(Rc::new(|emitter, name, arg| {
+        let emitter = emitter_unbox(&emitter);
+        crate::mk_bool(emitter.emit(key_from_value(&name), vec![arg]))
+    })))
+}
+
+pub fn Node_EventEmitter_unsafeEmitFn3() -> crate::UnknownType {
+    crate::Value::Func4(purust_core::Func4::Shared(
+        Rc::new(|emitter, name, first, second| {
+            let emitter = emitter_unbox(&emitter);
+            crate::mk_bool(emitter.emit(key_from_value(&name), vec![first, second]))
+        }),
+    ))
 }
 
 pub fn Node_EventEmitter_unsafeOn() -> crate::UnknownType {

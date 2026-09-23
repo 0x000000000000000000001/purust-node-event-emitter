@@ -10,3 +10,5 @@ output.bak/
 /.psa*
 /.spago
 /.vscode
+
+.purmeta/

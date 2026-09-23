@@ -58,7 +58,9 @@ module Node.EventEmitter
   , listenerCount
   , setMaxListeners
   , setUnlimitedListeners
-  , unsafeEmitFn
+  , unsafeEmitFn1
+  , unsafeEmitFn2
+  , unsafeEmitFn3
   , EventHandle(..)
   , newListenerH
   , removeListenerH
@@ -150,7 +152,11 @@ setUnlimitedListeners = setMaxListeners 0
 -- | Synchronously calls each of the listeners registered for the event named `eventName`, 
 -- | in the order they were registered, passing the supplied arguments to each.
 -- | Returns `true` if the event had listeners, `false` otherwise.
-foreign import unsafeEmitFn :: forall f. EventEmitter -> f Boolean
+-- | Arity-specific emitters: a single polymorphic value cannot satisfy every
+-- | `EffectFnN` shape on the native backend.
+foreign import unsafeEmitFn1 :: EffectFn2 EventEmitter String Boolean
+foreign import unsafeEmitFn2 :: forall a. EffectFn3 EventEmitter String a Boolean
+foreign import unsafeEmitFn3 :: forall a b. EffectFn4 EventEmitter String a b Boolean
 
 -- | Packs all the type information we need to call `on`/`once`/`prependListener`/`prependOnceListener`
 -- | with the correct callback function type.
