@@ -386,3 +386,13 @@ pub fn purust_emitter_once_native(
 ) {
     emitter.add(EventKey::Str(event.to_owned()), callback, true, false);
 }
+
+/// Persistent native listener: integrations that consume a whole stream
+/// (HTTP request parsing, connection accept loops) must see every event.
+pub fn purust_emitter_on_native(
+    emitter: &Rc<EventEmitter>,
+    event: &str,
+    callback: crate::UnknownType,
+) {
+    emitter.add(EventKey::Str(event.to_owned()), callback, false, false);
+}
