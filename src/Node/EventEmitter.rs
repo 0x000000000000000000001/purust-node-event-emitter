@@ -452,3 +452,12 @@ pub fn purust_emitter_on_native(
 ) {
     emitter.add(EventKey::Str(event.to_owned()), callback, false, false);
 }
+
+/// Removes one listener by identity (used by `stream.unpipe`).
+pub fn purust_emitter_remove_native(
+    emitter: &Rc<EventEmitter>,
+    event: &str,
+    callback: &crate::UnknownType,
+) -> bool {
+    emitter.remove(&EventKey::Str(event.to_owned()), callback)
+}
