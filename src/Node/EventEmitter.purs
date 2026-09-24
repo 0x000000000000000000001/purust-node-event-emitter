@@ -61,6 +61,7 @@ module Node.EventEmitter
   , unsafeEmitFn1
   , unsafeEmitFn2
   , unsafeEmitFn3
+  , unsafeEmitFn4
   , EventHandle(..)
   , newListenerH
   , removeListenerH
@@ -79,7 +80,7 @@ import Prelude
 import Data.Either (Either(..))
 import Data.Function.Uncurried (Fn3, runFn3)
 import Effect (Effect)
-import Effect.Uncurried (EffectFn1, EffectFn2, EffectFn3, EffectFn4, mkEffectFn1, mkEffectFn4, runEffectFn1, runEffectFn2, runEffectFn3, runEffectFn4)
+import Effect.Uncurried (EffectFn1, EffectFn2, EffectFn3, EffectFn4, EffectFn5, mkEffectFn1, mkEffectFn4, runEffectFn1, runEffectFn2, runEffectFn3, runEffectFn4)
 import Node.Symbol (JsSymbol)
 import Unsafe.Coerce (unsafeCoerce)
 
@@ -123,40 +124,42 @@ setUnlimitedListeners :: EventEmitter -> Effect Unit
 setUnlimitedListeners = setMaxListeners 0
 
 -- | THIS IS UNSAFE! REALLY UNSAFE!
--- | Gets the `emit` function for a particular `EventEmitter`, so that one can call n-ary functions.
+-- | Gets an `emit` function for a particular `EventEmitter`, so that one can
+-- | call the listeners synchronously.
 -- |
 -- | Given `http2session.goaway([code[, lastStreamID[, opaqueData]]])` as an example...
 -- | - https://nodejs.org/dist/latest-v18.x/docs/api/http2.html#event-goaway
 -- | - https://nodejs.org/dist/latest-v18.x/docs/api/http2.html#http2sessiongoawaycode-laststreamid-opaquedata
 -- |
--- | We can then write a single function that handles all four cases:
+-- | The upstream JavaScript API exposes one polymorphic `unsafeEmitFn`. A
+-- | single native value cannot satisfy every `EffectFnN` shape, so the port
+-- | provides arity-specific emitters:
+-- |
+-- | - `unsafeEmitFn1 ee name` — `EffectFn2` (no payload)
+-- | - `unsafeEmitFn2 ee name a` — `EffectFn3`
+-- | - `unsafeEmitFn3 ee name a b` — `EffectFn4`
+-- | - `unsafeEmitFn4 ee name a b c` — `EffectFn5`
+-- |
+-- | The four-case example above then becomes:
 -- | ```
--- | goAway
--- |   :: Http2Session
--- |   -> Maybe Code
--- |   -> Maybe LastStreamId
--- |   -> Maybe OpaqueData
--- |   -> Effect Unit
 -- | goAway h2s = case _, _, _ of
 -- |   Just c, Just id, Just d ->
--- |     runEffectFn4 (unsafeEmitFn h2s :: EffectFn4 String Code LastStreamId OpaqueData Unit) "goaway" c id d
+-- |     runEffectFn5 (unsafeEmitFn4 h2s) "goaway" c id d
 -- |   Just c, Just id, Nothing ->
--- |     -- If you're feeling lucky, omit the type annotations completely
--- |     runEffectFn3 (unsafeEmitFn h2s) "goaway" c id
+-- |     runEffectFn4 (unsafeEmitFn3 h2s) "goaway" c id
 -- |   Just c, Nothing, Nothing ->
--- |     runEffectFn2 (unsafeEmitFn h2s :: EffectFn2 String Code LastStreamId Unit) "goaway" c
+-- |     runEffectFn3 (unsafeEmitFn2 h2s) "goaway" c
 -- |   _, _, _ ->
--- |     runEffectFn1 (unsafeEmitFn h2s :: EffectFn1 String Unit) "goaway"
+-- |     runEffectFn2 (unsafeEmitFn1 h2s) "goaway"
 -- | ```
--- | 
--- | Synchronously calls each of the listeners registered for the event named `eventName`, 
+-- |
+-- | Synchronously calls each of the listeners registered for the event named `eventName`,
 -- | in the order they were registered, passing the supplied arguments to each.
 -- | Returns `true` if the event had listeners, `false` otherwise.
--- | Arity-specific emitters: a single polymorphic value cannot satisfy every
--- | `EffectFnN` shape on the native backend.
 foreign import unsafeEmitFn1 :: EffectFn2 EventEmitter String Boolean
 foreign import unsafeEmitFn2 :: forall a. EffectFn3 EventEmitter String a Boolean
 foreign import unsafeEmitFn3 :: forall a b. EffectFn4 EventEmitter String a b Boolean
+foreign import unsafeEmitFn4 :: forall a b c. EffectFn5 EventEmitter String a b c Boolean
 
 -- | Packs all the type information we need to call `on`/`once`/`prependListener`/`prependOnceListener`
 -- | with the correct callback function type.

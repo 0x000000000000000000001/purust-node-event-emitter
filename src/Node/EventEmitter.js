@@ -6,7 +6,12 @@ const newImpl = function () {
 export { newImpl as new };
 
 // addEventListener - not implemented; alias to `on`
-export const unsafeEmitFn = (emitter) => emitter.emit.bind(emitter);
+// The native backend splits the upstream polymorphic `unsafeEmitFn` into
+// arity-specific emitters; in JavaScript `emit` already handles every arity.
+export const unsafeEmitFn1 = (emitter) => emitter.emit.bind(emitter);
+export const unsafeEmitFn2 = (emitter) => emitter.emit.bind(emitter);
+export const unsafeEmitFn3 = (emitter) => emitter.emit.bind(emitter);
+export const unsafeEmitFn4 = (emitter) => emitter.emit.bind(emitter);
 export const eventNamesImpl = (emitter) => emitter.eventNames();
 export const symbolOrStr = (left, right, sym) => typeof sym == "symbol" ? left(sym) : right(sym);
 export const getMaxListenersImpl = (emitter) => emitter.getMaxListeners();

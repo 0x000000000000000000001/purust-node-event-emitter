@@ -66,19 +66,22 @@ impl EventEmitter {
     }
 
     fn add(&self, key: EventKey, callback: crate::UnknownType, once: bool, prepend: bool) {
-        // Node notifies `newListener` before the listener is registered.
+        // Node notifies `newListener` before the listener is registered. The
+        // PureScript handler receives the name as a `SymbolOrStr`.
         if !matches!(&key, EventKey::Str(name) if name == "newListener") {
             self.emit(
                 EventKey::Str("newListener".to_owned()),
-                vec![key.value(), callback.clone()],
+                vec![symbol_or_str_value(key.value()), callback.clone()],
             );
         }
         {
             let mut listeners = self.listeners.lock().unwrap();
             if prepend {
+                // Prepend before the first listener of this same event, like
+                // Node; with no existing listener it is appended.
                 let position = listeners
                     .iter()
-                    .position(|(name, _)| !name.matches(&key))
+                    .position(|(name, _)| name.matches(&key))
                     .unwrap_or(listeners.len());
                 listeners.insert(position, (key.clone(), Listener { callback, once }));
             } else {
@@ -106,7 +109,7 @@ impl EventEmitter {
                 if !matches!(&name, EventKey::Str(value) if value == "removeListener") {
                     self.emit(
                         EventKey::Str("removeListener".to_owned()),
-                        vec![name.value(), listener.callback],
+                        vec![symbol_or_str_value(name.value()), listener.callback],
                     );
                 }
                 true
@@ -143,29 +146,40 @@ impl EventEmitter {
     }
 }
 
+/// Node calls every listener with the emitted arguments; a listener only
+/// consumes the arguments it declares and extra ones are ignored. Native
+/// listeners are `EffectFnN` values (zero-arity listeners are `Effect Unit`),
+/// so dispatch on the listener's own arity instead of the emitted count: an
+/// `mkEffectFn1` wrapper already collapses its effect, which a curried
+/// `unwrap_func2` chain cannot handle.
 fn call_callback(callback: &crate::UnknownType, args: &[crate::UnknownType]) {
-    match args.len() {
-        0 => {
-            callback.unwrap_func1()(crate::Value::Unit);
+    let argument = |index: usize| {
+        args.get(index)
+            .cloned()
+            .unwrap_or(crate::Value::Unit)
+    };
+    match callback.resolve() {
+        crate::Value::Func2(_) => {
+            callback.unwrap_func2()(argument(0), argument(1));
         }
-        1 => {
-            callback.unwrap_func1()(args[0].clone());
+        crate::Value::Func3(_) => {
+            callback.unwrap_func3()(argument(0), argument(1), argument(2));
         }
-        2 => {
-            callback.unwrap_func2()(args[0].clone(), args[1].clone());
+        crate::Value::Func4(_) => {
+            callback.unwrap_func4()(argument(0), argument(1), argument(2), argument(3));
         }
-        3 => {
-            callback.unwrap_func3()(args[0].clone(), args[1].clone(), args[2].clone());
-        }
-        4 => {
-            callback.unwrap_func4()(
-                args[0].clone(),
-                args[1].clone(),
-                args[2].clone(),
-                args[3].clone(),
+        crate::Value::Func5(_) => {
+            callback.unwrap_func5()(
+                argument(0),
+                argument(1),
+                argument(2),
+                argument(3),
+                argument(4),
             );
         }
-        _ => panic!("Node.EventEmitter: unsupported emit arity"),
+        _ => {
+            callback.unwrap_func1()(argument(0));
+        }
     }
 }
 
@@ -214,6 +228,25 @@ pub fn Node_EventEmitter_new() -> crate::UnknownType {
     }))
 }
 
+/// The `eventNames` foreign type. The generated code carries it class-wrapped
+/// as `Rc<SymbolOrStr>`; the payload keeps the raw event key (a `String` or a
+/// symbol box) so `symbolOrStr` can route it.
+#[derive(Clone)]
+pub struct SymbolOrStr(pub crate::UnknownType);
+
+fn symbol_or_str_value(name: crate::UnknownType) -> crate::UnknownType {
+    crate::Value::Class(Rc::new(Rc::new(SymbolOrStr(name))))
+}
+
+fn unbox_symbol_or_str(value: &crate::UnknownType) -> crate::UnknownType {
+    if let crate::Value::Class(payload) = value.resolve() {
+        if let Some(carrier) = payload.downcast_ref::<Rc<SymbolOrStr>>() {
+            return carrier.0.clone();
+        }
+    }
+    value.clone()
+}
+
 pub fn Node_EventEmitter_eventNamesImpl(emitter: Rc<EventEmitter>) -> crate::UnknownType {
     let mut names: Vec<crate::UnknownType> = Vec::new();
     for (key, _) in emitter.listeners.lock().unwrap().iter() {
@@ -224,7 +257,7 @@ pub fn Node_EventEmitter_eventNamesImpl(emitter: Rc<EventEmitter>) -> crate::Unk
             names.push(key.value());
         }
     }
-    purust_core::mk_array(names)
+    purust_core::mk_array(names.into_iter().map(symbol_or_str_value).collect())
 }
 
 fn key_matches_value(key: &EventKey, value: &crate::UnknownType) -> bool {
@@ -237,10 +270,11 @@ fn key_matches_value(key: &EventKey, value: &crate::UnknownType) -> bool {
 
 pub fn Node_EventEmitter_symbolOrStr() -> crate::UnknownType {
     crate::Value::Func3(purust_core::Func3::Shared(Rc::new(|left, right, value| {
-        if purust_symbol_unbox(&value).is_some() {
-            left.unwrap_func1()(value)
+        let name = unbox_symbol_or_str(&value);
+        if purust_symbol_unbox(&name).is_some() {
+            left.unwrap_func1()(name)
         } else {
-            right.unwrap_func1()(value)
+            right.unwrap_func1()(name)
         }
     })))
 }
@@ -287,6 +321,15 @@ pub fn Node_EventEmitter_unsafeEmitFn3() -> crate::UnknownType {
         Rc::new(|emitter, name, first, second| {
             let emitter = emitter_unbox(&emitter);
             crate::mk_bool(emitter.emit(key_from_value(&name), vec![first, second]))
+        }),
+    ))
+}
+
+pub fn Node_EventEmitter_unsafeEmitFn4() -> crate::UnknownType {
+    crate::Value::Func5(purust_core::Func5::Shared(
+        Rc::new(|emitter, name, first, second, third| {
+            let emitter = emitter_unbox(&emitter);
+            crate::mk_bool(emitter.emit(key_from_value(&name), vec![first, second, third]))
         }),
     ))
 }
