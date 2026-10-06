@@ -12,3 +12,4 @@ output.bak/
 /.vscode
 
 .purmeta/
+.DS_Store
